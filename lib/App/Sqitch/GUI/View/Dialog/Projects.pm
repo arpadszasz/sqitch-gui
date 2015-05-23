@@ -1,89 +1,268 @@
-package App::Sqitch::GUI::View::Dialog::Repo;
+package App::Sqitch::GUI::View::Dialog::Projects;
 
-use Moose;
-use namespace::autoclean;
-
-use Try::Tiny;
+use 5.010;
+use strict;
+use warnings;
+use Moo;
+use App::Sqitch::GUI::Types qw(
+    Dir
+    HashRef
+    Int
+    Maybe
+    Object
+    SqitchGUIConfig
+    SqitchGUIListCtrl
+    SqitchGUIWxApp
+    Str
+    WxButton
+    WxComboBox
+    WxDirPickerCtrl
+    WxGridSizer
+    WxSizer
+    WxStaticLine
+    WxStaticText
+    WxTextCtrl
+    WxWindow
+);
 use Path::Class;
 use Locale::TextDomain 1.20 qw(App-Sqitch-GUI);
-use App::Sqitch::X qw(hurl);
-
 use Wx qw(:everything);
-use Wx::Event qw(EVT_CLOSE EVT_BUTTON EVT_LIST_ITEM_SELECTED
-                 EVT_DIRPICKER_CHANGED);
-
-with 'App::Sqitch::GUI::Roles::Element';
-
-use MooseX::NonMoose::InsideOut;
+use Wx::Event qw(
+    EVT_CLOSE
+    EVT_BUTTON
+    EVT_LIST_ITEM_SELECTED
+    EVT_DIRPICKER_CHANGED
+);
+use App::Sqitch::X qw(hurl);
 
 extends 'Wx::Dialog';
 
-use App::Sqitch::GUI::View::List;
+with 'App::Sqitch::GUI::Roles::Element';
 
-use Data::Printer;
+use App::Sqitch::GUI::ListDataTable;
+use App::Sqitch::GUI::ListCtrl;
 
-has 'sizer'      => ( is => 'rw', isa => 'Wx::Sizer',  lazy_build => 1 );
-has 'vbox_sizer' => ( is => 'rw', isa => 'Wx::Sizer',  lazy_build => 1 );
-
-has 'h_line1' => ( is => 'rw', isa => 'Wx::StaticLine',  lazy_build => 1 );
-has 'h_line2' => ( is => 'rw', isa => 'Wx::StaticLine',  lazy_build => 1 );
-
-has 'form_fg_sz' => ( is => 'rw', isa => 'Wx::Sizer', lazy_build => 1 );
-has 'list_fg_sz' => ( is => 'rw', isa => 'Wx::Sizer', lazy_build => 1 );
-
-has 'lbl_name' => ( is => 'rw', isa => 'Wx::StaticText',    lazy_build => 1 );
-has 'txt_name' => ( is => 'rw', isa => 'Wx::TextCtrl',      lazy_build => 1 );
-has 'lbl_path' => ( is => 'rw', isa => 'Wx::StaticText',    lazy_build => 1 );
-has 'dpc_path' => ( is => 'rw', isa => 'Wx::DirPickerCtrl', lazy_build => 1 );
-has 'lbl_engine' => ( is => 'rw', isa => 'Wx::StaticText', lazy_build => 1 );
-has 'cbx_engine' => ( is => 'rw', isa => 'Wx::ComboBox',   lazy_build => 1 );
-has 'lbl_db'   => ( is => 'rw', isa => 'Wx::StaticText',    lazy_build => 1 );
-has 'txt_db'   => ( is => 'rw', isa => 'Wx::TextCtrl',      lazy_build => 1 );
-
-has 'list_ctrl' => (
-    is         => 'rw',
-    isa        => 'App::Sqitch::GUI::View::List',
-    lazy_build => 1,
+has 'sizer' => (
+    is      => 'rw',
+    isa     => WxSizer,
+    lazy    => 1,
+    builder => '_build_sizer',
 );
 
-has 'mesg_ctrl' => ( is => 'rw', isa => 'Wx::StaticText', lazy_build => 1 );
+sub _build_sizer {
+    return Wx::BoxSizer->new(wxVERTICAL);
+}
 
-has 'btn_sizer'   => ( is => 'rw', isa => 'Wx::Sizer', lazy_build => 1 );
-has 'btn_sizer_l' => ( is => 'rw', isa => 'Wx::GridSizer', lazy_build => 1 );
-has 'btn_sizer_r' => ( is => 'rw', isa => 'Wx::Sizer', lazy_build => 1 );
+has 'vbox_sizer' => (
+    is      => 'rw',
+    isa     => WxSizer,
+    lazy    => 1,
+    builder => '_build_vbox_sizer',
+);
 
-has 'btn_new'     => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
-has 'btn_edit'    => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
-has 'btn_remove'  => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
-has 'btn_load'    => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
-has 'btn_default' => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
-has 'btn_close'   => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
-has 'btn_save'    => ( is => 'rw', isa => 'Wx::Button', lazy_build => 1 );
+has 'h_line1' => (
+    is      => 'rw',
+    isa     => WxStaticLine,
+    lazy    => 1,
+    builder => '_build_h_line1',
+);
+
+has 'h_line2' => (
+    is      => 'rw',
+    isa     => WxStaticLine,
+    lazy    => 1,
+    builder => '_build_h_line2',
+);
+
+has 'form_fg_sz' => (
+    is      => 'rw',
+    isa     => WxSizer,
+    lazy    => 1,
+    builder => '_build_form_fg_sz',
+);
+
+has 'list_fg_sz' => (
+    is      => 'rw',
+    isa     => WxSizer,
+    lazy    => 1,
+    builder => '_build_list_fg_sz',
+);
+
+has 'lbl_name' => (
+    is      => 'rw',
+    isa     => WxStaticText,
+    lazy    => 1,
+    builder => '_build_lbl_name',
+);
+
+has 'txt_name' => (
+    is      => 'rw',
+    isa     => WxTextCtrl,
+    lazy    => 1,
+    builder => '_build_txt_name',
+);
+
+has 'lbl_path' => (
+    is      => 'rw',
+    isa     => WxStaticText,
+    lazy    => 1,
+    builder => '_build_lbl_path',
+);
+
+has 'dpc_path' => (
+    is      => 'rw',
+    isa     => WxDirPickerCtrl,
+    lazy    => 1,
+    builder => '_build_dpc_path',
+);
+
+has 'lbl_engine' => (
+    is      => 'rw',
+    isa     => WxStaticText,
+    lazy    => 1,
+    builder => '_build_lbl_engine',
+);
+
+has 'cbx_engine' => (
+    is      => 'rw',
+    isa     => WxComboBox,
+    lazy    => 1,
+    builder => '_build_cbx_engine',
+);
+
+has 'lbl_db' => (
+    is      => 'rw',
+    isa     => WxStaticText,
+    lazy    => 1,
+    builder => '_build_lbl_db',
+);
+
+has 'txt_db' => (
+    is      => 'rw',
+    isa     => WxTextCtrl,
+    lazy    => 1,
+    builder => '_build_txt_db',
+);
+
+has 'list_ctrl' => (
+    is       => 'rw',
+    isa      => SqitchGUIListCtrl,
+    required => 1,
+    lazy     => 1,
+    builder  => '_build_list_ctrl',
+);
+
+has 'btn_sizer' => (
+    is      => 'rw',
+    isa     => WxSizer,
+    lazy    => 1,
+    builder => '_build_btn_sizer',
+);
+
+has 'btn_sizer_l' => (
+    is      => 'rw',
+    isa     => WxGridSizer,
+    lazy    => 1,
+    builder => '_build_btn_sizer_l',
+);
+
+has 'btn_sizer_r' => (
+    is      => 'rw',
+    isa     => WxSizer,
+    lazy    => 1,
+    builder => '_build_btn_sizer_r',
+);
+
+has 'btn_new' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_new',
+);
+
+has 'btn_edit' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_edit',
+);
+
+has 'btn_remove' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_remove',
+);
+
+has 'btn_load' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_load',
+);
+
+has 'btn_default' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_default',
+);
+
+has 'btn_close' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_close',
+);
+
+has 'btn_save' => (
+    is      => 'rw',
+    isa     => WxButton,
+    lazy    => 1,
+    builder => '_build_btn_save',
+);
 
 has 'selected_item' => (
     is      => 'rw',
-    isa     => 'Maybe[Int]',
+    isa     => Maybe[Int],
     default => sub { undef },
 );
 
 has 'selected_name' => (
     is      => 'rw',
-    isa     => 'Maybe[Str]',
+    isa     => Maybe[Str],
     default => sub { undef },
 );
 
 has 'selected_path' => (
     is      => 'rw',
-    isa     => 'Maybe[Path::Class::Dir]',
+    isa     => Maybe[Dir],
     default => sub { undef },
 );
 
 has config => (
     is      => 'ro',
-    isa     => 'App::Sqitch::GUI::Config',
+    isa     => SqitchGUIConfig,
     lazy    => 1,
     default => sub {
         shift->ancestor->config;
+    },
+);
+
+has 'project_list' => (
+    is      => 'ro',
+    isa     => HashRef,
+    lazy    => 1,
+     default => sub {
+        my $self = shift;
+        return $self->config->project_list;
+    },
+);
+
+has 'list_data' => (
+    is      => 'ro',
+    default => sub {
+        return App::Sqitch::GUI::ListDataTable->new;
     },
 );
 
@@ -93,7 +272,7 @@ sub FOREIGNBUILDARGS {
     return (
         $args{parent},
         -1,
-        __ 'Repository List',
+        __ 'Project List',
         [-1, -1],
         [-1, -1],
         wxRESIZE_BORDER | wxDEFAULT_DIALOG_STYLE,
@@ -106,11 +285,10 @@ sub BUILD {
     $self->SetMinSize([500, 500]);
 
     #-- List and buttons
-
+print "building\n";
     $self->sizer->Add( $self->vbox_sizer, 1, wxEXPAND | wxALL, 5 );
-
+print "ok sizer\n";
     $self->list_fg_sz->Add( $self->list_ctrl, 1, wxEXPAND | wxALL, 5 );
-    $self->list_fg_sz->Add( $self->mesg_ctrl, 1, wxEXPAND | wxALL, 5 );
 
     $self->list_fg_sz->Add( $self->h_line1,    1, wxEXPAND | wxALL, 5 );
     $self->list_fg_sz->Add( $self->form_fg_sz, 1, wxEXPAND | wxALL, 5 );
@@ -144,9 +322,9 @@ sub BUILD {
 
     $self->SetSizer( $self->sizer );
 
-    $self->_init();
+    $self->_init;
 
-    $self->list_ctrl->SetFocus();
+    $self->list_ctrl->SetFocus;
 
     return $self;
 }
@@ -162,11 +340,12 @@ sub set_status {
     return;
 }
 
-sub _build_vbox_sizer {
-    return Wx::BoxSizer->new(wxVERTICAL);
+sub get_state {
+    my $self = shift;
+    return $self->ancestor->dlg_status->get_state;
 }
 
-sub _build_sizer {
+sub _build_vbox_sizer {
     return Wx::BoxSizer->new(wxVERTICAL);
 }
 
@@ -202,7 +381,7 @@ sub _build_txt_name {
 
 sub _build_lbl_path {
     my $self = shift;
-    return Wx::StaticText->new( $self, -1, __ 'Repository' );
+    return Wx::StaticText->new( $self, -1, __ 'Project' );
 }
 
 sub _build_dpc_path {
@@ -349,31 +528,16 @@ sub _build_btn_close {
 sub _build_list_ctrl {
     my $self = shift;
 
-    my $list = App::Sqitch::GUI::View::List->new(
+    my $list = App::Sqitch::GUI::ListCtrl->new(
         app       => $self->app,
         parent    => $self,
-        count_col => 1,                      # add a count column
-    );
+        list_data => $self->list_data,
+        meta_data => $self->list_meta_data,
 
-    $list->add_column( __ 'Name',    wxLIST_FORMAT_LEFT, 100, 'name' );
-    $list->add_column( __ 'Path',    wxLIST_FORMAT_LEFT, 250, 'path' );
-    $list->add_column( __ 'Default', wxLIST_FORMAT_CENTER,    'default' );
+        # count_col => 1,                      # add a count column XXX
+    );
 
     return $list;
-}
-
-sub _build_mesg_ctrl {
-    my $self = shift;
-    my $label = Wx::StaticText->new(
-        $self, -1,
-        q{This should be a centered blue text on a red background!},
-        [ -1, -1 ],
-        [ -1, -1 ],
-        wxST_NO_AUTORESIZE | wxALIGN_CENTRE | wxRAISED_BORDER, # ! doesn't work
-    );
-    $label->SetForegroundColour( Wx::Colour->new('blue') );
-    $label->SetBackgroundColour( Wx::Colour->new('red') ); # ! doesn't work
-    return $label;
 }
 
 #-- Lines
@@ -449,15 +613,12 @@ sub _set_events {
 sub _init {
     my $self = shift;
 
-    my $repo_list = $self->config->repo_list;
-
-    # Prepare records
+    # Populate list
     my $records_ref = [];
-    while ( my ( $name, $path ) = each( %{$repo_list} ) ) {
-        push @{$records_ref}, { name => $name, path => $path };
+    for my $pair ( $self->repo_pairs ) {
+        push @{$records_ref}, { name => $pair->[0], path => $pair->[1] };
     }
-
-    $self->list_ctrl->populate($records_ref);
+    $self->populate($records_ref);
 
     # Default from config
     my $repo_default = $self->config->repo_default_name;
@@ -468,13 +629,37 @@ sub _init {
             last if $repo_default eq $rec->{name};
             $index++;
         }
-        $self->_set_as_default($index);
-        $self->list_ctrl->select_item($index);
-        $self->_load_item($index);
+        $self->_mark_as_default($index);
+        $self->list_ctrl->set_selection($index);
+        $self->_select_item($index);
+        $self->_load_selected_item($index);
     }
 
     $self->ancestor->dlg_status->set_state('init');
 
+    return;
+}
+
+sub populate {
+    my ($self, $record_ref) = @_;
+
+    my $data_table = $self->list_data;
+    my $cols_meta  = $self->list_meta_data;
+    my $row        = ( $data_table->get_item_count // 1 ) - 1;
+    foreach my $rec ( @{$record_ref} ) {
+        my $col = 0;
+        foreach my $meta ( @{$cols_meta} ) {
+            my $field = $meta->{field};
+            my $value
+                = $field eq q{}     ? q{}
+                : $field eq 'recno' ? ( $row + 1 )
+                :                     ( $rec->{$field} // q{} );
+            $data_table->set_value( $row, $col, $value );
+            $col++;
+        }
+        $self->list_ctrl->RefreshList;
+        $row++;
+    }
     return;
 }
 
@@ -526,7 +711,6 @@ sub _control_read_c {
 
 sub _init_form {
     my $self = shift;
-    print "Init form\n";
     $self->_control_write_e('txt_name', undef);
     $self->_control_write_e('txt_db', undef);
     $self->_control_write_c('cbx_engine', 'unknown');
@@ -535,7 +719,6 @@ sub _init_form {
 
 sub _clear_form {
     my $self = shift;
-    print "Clear form\n";
     $self->_control_write_p('dpc_path', '');
     $self->_init_form;
     return;
@@ -544,74 +727,118 @@ sub _clear_form {
 sub _on_item_selected {
     my ($self, $var, $event) =  @_;
     my $item = $event->GetIndex;
-    $self->_load_item($item);
+
+    return unless $self->get_state eq 'sele';
+
+    $self->_clear_form;
+    $self->_select_item($item);
+    $self->_load_selected_item;
+
     return;
 }
 
 sub _on_dpc_change {
     my ($self, $frame, $event) = @_;
+
     print "Path changed\n";
+
     my $new_path = $event->GetEventObject->GetPath;
-    print "'$new_path' is the new path\n";
+    if ( $self->get_state ne 'sele' ) {
+        if ( $self->is_duplicate_path($new_path) ) {
+            $self->set_message( __ '*** Duplicate path! ***' );
+            return;
+        }
+    }
+
     $self->_init_form;
     $self->config->reload($new_path);
     my $engine = $self->config->get( key => 'core.engine' );
     print "Engine is $engine\n";
-    p $self->config;
+
+    # Default project name: the dir name
+    my $name = file($new_path)->basename;
+    $self->_control_write_e('txt_name', $name);
+
     return;
 }
 
-sub _load_item {
+sub _select_item {
     my ($self, $item) = @_;
 
-    my $name = $self->list_ctrl->get_list_item_text($item, 1);
+    ###my $sel = $self->list_ctrl->get_selection;
+    #p $sel;
+
+    my $name = $self->list_data->get_value($item, 1);
+    my $path = $self->list_data->get_value($item, 2);
+
     $self->_control_write_e('txt_name', $name);
-    my $path = $self->list_ctrl->get_list_item_text($item, 2);
     $self->_control_write_p('dpc_path', $path);
-    my $engine = $self->config->get( key => 'core.engine' );
-    my $engine_name = $self->config->get_engine_name($engine);
-    if ($engine_name) {
-        $self->_control_write_c('cbx_engine', $engine_name);
-    }
-    my $database = $self->config->get( key => "core.${engine}.db_name" );
-    if ($database) {
-        $self->_control_write_e('txt_db', $database);
-    }
 
     # Store the selected id, name and path
     $self->selected_item($item);
     $self->selected_name($name);
-    $self->selected_path( dir $path );
+    $self->selected_path( dir $path ) if $path;
 
     return;
 }
 
-sub _set_as_default {
-    my ($self, $item) = @_;
+=head2 _load_selected_item
 
+Load info for the selected list item.  Can't use the current Sqitch
+configuration for this, for every item (project) we have to load
+the local configuration file and get the required info from there.
+
+=cut
+
+sub _load_selected_item {
+    my $self = shift;
+
+    # Load the local config
+
+    my $item_cfg_file = file $self->selected_path, $self->config->confname;
+    my $item_cfg_href = Config::GitLike->load_file($item_cfg_file);
+
+    my $engine_code = $item_cfg_href->{'core.engine'};
+    my $engine_name = $self->config->get_engine_name($engine_code);
+    $self->_control_write_c('cbx_engine', $engine_name) if $engine_name;
+
+    # Use target here
+    # $self->config->reload($self->selected_path);
+    # my %targets = $self->config->get_regexp(key => qr/^target[.][^.]+[.]uri$/);
+    # p %targets;
+    # my $engine = $self->ancestor->sqitch->engine_for_target('flipr_test');
+    # my $database = $engine->uri->dbname;
+    # if ($database) {
+    #     $self->_control_write_e('txt_db', $database);
+    # }
+
+    return;
+}
+
+sub _mark_as_default {
+    my ($self, $item) = @_;
     $self->_clear_default_mark;
     $item = $self->selected_item unless defined $item;
     $self->_set_default_mark($item) if defined $item;
-
     return;
 }
 
 sub set_message {
     my ($self, $mesg) = @_;
-    $self->mesg_ctrl->SetLabel('');          # clear
-    $self->mesg_ctrl->SetLabel($mesg) if $mesg;
+    my $busy = Wx::BusyInfo->new($mesg);
+    $self->app->Yield;          # no text without this
+    Wx::Sleep(3);               # not very nice...
+    $busy = undef;
     return;
 }
 
 sub _clear_default_mark {
     my $self = shift;
-
-    my $max_index = $self->list_ctrl->list_max_index;
+    my $max_index = $self->list_data->get_item_count;
     for my $item (0..$max_index) {
-        $self->list_ctrl->set_list_item_data( $item, { default => 0 } );
-        $self->list_ctrl->set_list_item_text( $item, 3, q{} );
+        # $self->list_ctrl->set_list_item_data( $item, { default => 0 } ); XXX
+        # $self->list_ctrl->set_list_item_text( $item, 3, q{} );
     }
-
     return;
 }
 
@@ -619,9 +846,8 @@ sub _set_default_mark {
     my ($self, $item) = @_;
     hurl __ 'Wrong arguments passed to _set_default_mark()'
         unless defined $item;
-    $self->list_ctrl->set_list_item_data( $item, { default => 1 } );
-    $self->list_ctrl->set_list_item_text($item, 3, __ 'Yes');
-
+    # $self->list_ctrl->set_list_item_data( $item, { default => 1 } ); XXX
+    # $self->list_ctrl->set_list_item_text($item, 3, __ 'Yes');
     return;
 }
 
@@ -641,21 +867,23 @@ sub _get_default_item {
 sub config_new_repo {
     my $self = shift;
 
-    my $state = $self->ancestor->dlg_status->get_state;
+    my $state = $self->get_state;
 
     if ( $state eq 'sele' ) {
         print "Make state add\n";
         $self->_clear_form;
         $self->btn_new->SetLabel( __ 'C&ancel' );
         $self->ancestor->dlg_status->set_state('add');
-        $self->_new_list_item();
+        $self->list_ctrl->Enable(1);
+        my $item = $self->_new_list_item;
+        $self->selected_item($item);
         $self->list_ctrl->Enable(0);
     }
     elsif ( $state eq 'add' ) {
         print "Canceled...\n";
         $self->btn_new->SetLabel( __ '&New' );
         $self->ancestor->dlg_status->set_state('sele');
-        $self->_remove_list_item();
+        $self->_remove_list_item;
         $self->list_ctrl->Enable(1);
     }
 
@@ -665,7 +893,7 @@ sub config_new_repo {
 sub config_edit_repo {
     my $self = shift;
 
-    my $state = $self->ancestor->dlg_status->get_state;
+    my $state = $self->get_state;
 
     if ( $state eq 'sele' ) {
         print "Make state edit\n";
@@ -687,15 +915,25 @@ sub record_is_duplicate {
     my ($self, $name, $path) = @_;
 
     unless ($name and $path) {
-        $self->set_message('Add a repository Path and a Name, please.');
-        return;
+        $self->set_message(__ 'Add a project path, please.');
+        return 1;
     }
 
-    if (   $self->is_duplicate( 'name', $name )
-        or $self->is_duplicate( 'path', $path ) )
-    {
-        $self->set_message(__ 'Duplicate! To add a new repository, select a new path and add a name for it.');
+    my $dup_name = $self->is_duplicate_name($name);
+    my $dup_path = $self->is_duplicate_path($path);
+    if ($dup_name and $dup_path) {
+        $self->set_message(__ 'Duplicate name and path!');
         return 1;
+    }
+    else {
+        if ($dup_name) {
+            $self->set_message(__ 'Duplicate name!');
+            return 1;
+        }
+        if ($dup_path) {
+            $self->set_message(__ 'Duplicate path!');
+            return 1;
+        }
     }
 
     return;
@@ -703,13 +941,11 @@ sub record_is_duplicate {
 
 sub _new_list_item {
     my $self = shift;
-
     my $list_item = [ { name => '', path => '' } ];
     my $new_index = $self->list_ctrl->list_max_index + 1;
     $self->list_ctrl->populate($list_item, $new_index);
     $self->list_ctrl->select_item($new_index);
-
-    return;
+    return $new_index;
 }
 
 sub _remove_list_item {
@@ -722,6 +958,13 @@ sub _remove_list_item {
     return;
 }
 
+sub _edit_list_item {
+    my ($self, $item, $name, $path) = @_;
+    $self->list_ctrl->set_list_item_text($item, 1, $name);
+    $self->list_ctrl->set_list_item_text($item, 2, $path);
+    return;
+}
+
 sub config_remove_repo {
     my $self = shift;
 
@@ -729,7 +972,7 @@ sub config_remove_repo {
     my $path = $self->_control_read_p('dpc_path');
 
     unless ($name and $path) {
-        $self->set_message(__ 'Select a repository item, please.');
+        $self->set_message(__ 'Select a project item, please.');
         return;
     }
 
@@ -738,18 +981,23 @@ sub config_remove_repo {
 
     $self->ancestor->config_remove_repo($name, $path, $is_default);
 
+    $self->_remove_list_item;
+
     return;
 }
 
 sub config_save_repo {
     my $self = shift;
 
-    # Save in user config
     my $name = $self->_control_read_e('txt_name');
     my $path = $self->_control_read_p('dpc_path');
-    unless ( $self->record_is_duplicate( $name, $path ) ) {
-        $self->ancestor->config_edit_repo( $name, $path );
-    }
+
+    return if $self->record_is_duplicate( $name, $path );
+
+    print " Saving...\n";
+
+    # Save in user config
+    $self->ancestor->config_edit_repo( $name, $path );
 
     # Save in local config
     my $engine_name = $self->_control_read_c('cbx_engine');
@@ -762,18 +1010,22 @@ sub config_save_repo {
     $self->btn_edit->SetLabel( __ '&Edit' );
     $self->ancestor->dlg_status->set_state('sele');
 
+    $self->_edit_list_item($self->selected_item, $name, $path);
+
     return;
 }
 
 sub config_set_default {
     my $self = shift;
 
-    $self->_set_as_default;
+    my $index = $self->list_ctrl->get_selection;
+    print "Select item no $index\n";
+    $self->_select_item($index);
 
     my $name = $self->selected_name;
     my $path = $self->selected_path;
     unless ( $name and $path ) {
-        $self->set_message(__ 'Select a repository item, please.');
+        $self->set_message(__ 'Select a project item, please.');
         return;
     }
 
@@ -788,25 +1040,65 @@ sub config_set_default {
     print 'r: user_file:   ', $self->config->user_file, "\n";
     print 'r: local_file:  ', $self->config->local_file, "\n";
 
+    $self->_mark_as_default;
+
     return;
 }
 
-sub is_duplicate {
-    my ($self, $field, $name) = @_;
-    my $proc = "selected_$field";
-    return 1 if $self->$proc eq $name;
-    return 0;
+sub is_duplicate_name {
+    my ($self, $name) = @_;
+    my $curr_name = $self->selected_name;
+    for my $pair ( $self->repo_pairs ) {
+        next if $name eq $curr_name;
+        return 1 if $pair->[0] eq $name;
+    }
+    return;
+}
+
+sub is_duplicate_path {
+    my ($self, $path) = @_;
+    my $curr_path = $self->selected_path;
+    for my $pair ( $self->repo_pairs ) {
+        next if $path eq $curr_path;
+        return 1 if $pair->[1] eq $path;
+    }
+    return;
 }
 
 sub OnClose {
     my ($self, $dialog, $event) = @_;
-
     $self->EndModal(wxID_OK);
     $self->Destroy;
-
     return;
 }
 
-__PACKAGE__->meta->make_immutable;
+sub list_meta_data {
+    return [
+        {   field => 'recno',
+            label => '#',
+            align => 'center',
+            width => 25,
+            type  => 'int',
+        },
+        {   field => 'name',
+            label => __ 'Name',
+            align => 'left',
+            width => 100,
+            type  => 'str',
+        },
+        {   field => 'path',
+            label => __ 'Path',
+            align => 'left',
+            width => 266,
+            type  => 'bool',
+        },
+        {   field => 'default',
+            label => __ 'Default',
+            align => 'center',
+            width => 60,
+            type  => 'bool',
+        },
+    ];
+}
 
 1;
