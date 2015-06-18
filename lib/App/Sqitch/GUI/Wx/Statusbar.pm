@@ -1,8 +1,7 @@
-package App::Sqitch::GUI::View::StatusBar;
+package App::Sqitch::GUI::Wx::Statusbar;
 
-use 5.010;
-use strict;
-use warnings;
+# ABSTRACT: Wx Statusbar Control
+
 use Moo;
 use App::Sqitch::GUI::Types qw(
     Str

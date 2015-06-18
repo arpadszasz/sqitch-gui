@@ -1,5 +1,7 @@
 package App::Sqitch::GUI::View::Dialog::Refresh;
 
+# ABSTRACT: An Observer for the Projects Dialog
+
 use 5.010;
 use Moose;
 use namespace::autoclean;
@@ -10,7 +12,7 @@ use App::Sqitch::GUI::View::Dialog::Rules;
 
 has 'dialog' => (
     is   => 'ro',
-    isa  => 'App::Sqitch::GUI::View::Dialog::Repo',
+    isa  => 'App::Sqitch::GUI::View::Dialog::Projects',
 );
 
 has 'rules' => (

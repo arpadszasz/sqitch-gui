@@ -1,5 +1,7 @@
 package App::Sqitch::GUI::View::Panel::Plan;
 
+# ABSTRACT: The Plan Panel
+
 use 5.010;
 use strict;
 use warnings;
@@ -8,14 +10,14 @@ use Moo;
 use App::Sqitch::GUI::Types qw(
     WxPanel
     WxSizer
-    SqitchGUIListCtrl
+    SqitchGUIWxListctrl
+    SqitchGUIModelListDataTable
 );
 use Locale::TextDomain 1.20 qw(App-Sqitch-GUI);
 use Wx qw(:allclasses :everything);
 use Wx::Event qw(EVT_CLOSE);
 
-use App::Sqitch::GUI::ListDataTable;
-use App::Sqitch::GUI::ListCtrl;
+use App::Sqitch::GUI::Wx::Listctrl;
 
 with 'App::Sqitch::GUI::Roles::Element';
 
@@ -63,17 +65,21 @@ has 'list_fg_sz' => (
 
 has 'list_ctrl' => (
     is      => 'rw',
-    isa     => SqitchGUIListCtrl,
+    isa     => SqitchGUIWxListctrl,
     lazy    => 1,
     builder => '_build_list_ctrl',
 );
 
-has 'list_data' => (
-    is      => 'ro',
-    default => sub {
-        return App::Sqitch::GUI::ListDataTable->new;
-    },
-);
+sub _build_list_ctrl {
+    my $self = shift;
+    my $list_ctrl = App::Sqitch::GUI::Wx::Listctrl->new(
+        app       => $self->app,
+        parent    => $self->panel,
+        list_data => $self->app->model->plan_list_data,
+        meta_data => $self->app->model->plan_list_meta_data,
+    );
+    return $list_ctrl;
+}
 
 sub BUILD {
     my $self = shift;
@@ -136,56 +142,10 @@ sub _build_sb_sizer {
         Wx::StaticBox->new( $self->panel, -1, __ 'Plan ', ), wxVERTICAL );
 }
 
-sub _build_list_ctrl {
-    my $self = shift;
-    my $list_ctrl = App::Sqitch::GUI::ListCtrl->new(
-        app       => $self->app,
-        parent    => $self->panel,
-        list_data => $self->list_data,
-        meta_data => $self->list_meta_data,
-    );
-    return $list_ctrl;
-}
-
 sub _set_events { }
 
 sub OnClose {
     my ($self, $event) = @_;
-}
-
-sub list_meta_data {
-    return [
-        {   field => 'recno',
-            label => '#',
-            align => 'center',
-            width => 25,
-            type  => 'int',
-        },
-        {   field => 'namr',
-            label => __ 'Name',
-            align => 'left',
-            width => 100,
-            type  => 'str',
-        },
-        {   field => 'create_time',
-            label => __ 'Create time',
-            align => 'left',
-            width => 150,
-            type  => 'str',
-        },
-        {   field => 'creator',
-            label => __ 'Creator',
-            align => 'center',
-            width => 110,
-            type  => 'str',
-        },
-        {   field => 'description',
-            label => __ 'Description',
-            align => 'left',
-            width => 225,
-            type  => 'str',
-        },
-    ];
 }
 
 =head1 AUTHOR

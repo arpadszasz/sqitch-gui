@@ -1,11 +1,15 @@
 package App::Sqitch::GUI::WxApp;
 
+# ABSTRACT: Wx App Extension
+
 use 5.010;
 use strict;
 use warnings;
 use Moo;
 use App::Sqitch::GUI::Types qw(
+    Maybe
     SqitchGUIConfig
+    SqitchGUIModel
     SqitchGUIView
 );
 use Wx;
@@ -13,12 +17,14 @@ use Wx::Event qw(EVT_CLOSE);
 
 extends 'Wx::App';
 
-use App::Sqitch::GUI::Config;
+use App::Sqitch::GUI::Model;
 use App::Sqitch::GUI::View;
 
 has config => (
-    is  => 'ro',
-    isa => SqitchGUIConfig,
+    is       => 'ro',
+    isa      => Maybe [SqitchGUIConfig],
+    lazy     => 1,
+    required => 1,
 );
 
 has 'view' => (
@@ -29,6 +35,13 @@ has 'view' => (
     handles => {
         menu_bar => 'menu_bar',
     },
+);
+
+has 'model' => (
+    is       => 'ro',
+    isa      => SqitchGUIModel,
+    lazy     => 1,
+    required => 1,
 );
 
 sub FOREIGNBUILDARGS {

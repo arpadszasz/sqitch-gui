@@ -1,17 +1,15 @@
 package App::Sqitch::GUI::View;
 
+# ABSTRACT: The View
+
 use 5.010;
-use strict;
-use warnings;
+use utf8;
 use Moo;
 use App::Sqitch::GUI::Types qw(
     ArrayRef
     Int
     Maybe
-    SqitchGUIViewMenuBar
-    SqitchGUIViewMenuBarAdmin
-    SqitchGUIViewMenuBarApp
-    SqitchGUIViewMenuBarHelp
+    SqitchGUIModel
     SqitchGUIViewPanelBottom
     SqitchGUIViewPanelChange
     SqitchGUIViewPanelLeft
@@ -19,32 +17,40 @@ use App::Sqitch::GUI::Types qw(
     SqitchGUIViewPanelProject
     SqitchGUIViewPanelRight
     SqitchGUIViewPanelTop
-    SqitchGUIViewStatusBar
+    SqitchGUIWxStatusbar
+    SqitchGUIWxToolbar
     Str
     WxFrame
     WxPoint
     WxSize
     WxSizer
     WxSplitterWindow
-    WxStatusBar
 );
 use Wx qw(:everything);
-use Wx::Event qw(EVT_CLOSE EVT_BUTTON EVT_MENU EVT_RADIOBUTTON);
+use Wx::Event qw(
+    EVT_BUTTON
+    EVT_CLOSE
+    EVT_LIST_ITEM_SELECTED
+    EVT_MENU
+    EVT_RADIOBUTTON
+    EVT_TOOL
+);
+use Locale::TextDomain 1.20 qw(App-Sqitch-GUI);
+use App::Sqitch::X qw(hurl);
 
 with 'App::Sqitch::GUI::Roles::Element';
 
-use App::Sqitch::GUI::View::MenuBar;
-use App::Sqitch::GUI::View::StatusBar;
+use App::Sqitch::GUI::Config::Toolbar;
+use App::Sqitch::GUI::Wx::Menubar;
+use App::Sqitch::GUI::Wx::Toolbar;
+use App::Sqitch::GUI::Wx::Statusbar;
 use App::Sqitch::GUI::View::Panel::Left;
 use App::Sqitch::GUI::View::Panel::Right;
 use App::Sqitch::GUI::View::Panel::Top;
 use App::Sqitch::GUI::View::Panel::Bottom;
-
 use App::Sqitch::GUI::View::Panel::Change;
 use App::Sqitch::GUI::View::Panel::Project;
 use App::Sqitch::GUI::View::Panel::Plan;
-
-use Data::Printer;
 
 # Main window
 
@@ -82,16 +88,16 @@ has 'size' => (
     builder => '_build_size',
 );
 
-has 'menu_bar' => (
+has 'tool_bar' => (
     is      => 'rw',
-    isa     => SqitchGUIViewMenuBar,
+    isa     => SqitchGUIWxToolbar,
     lazy    => 1,
-    builder => '_build_menu_bar',
+    builder => '_build_tool_bar',
 );
 
 has 'status_bar' => (
     is      => 'rw',
-    isa     => SqitchGUIViewStatusBar,
+    isa     => SqitchGUIWxStatusbar,
     lazy    => 1,
     builder => '_build_status_bar',
 );
@@ -178,6 +184,15 @@ has 'splitter_w' => (
     builder => '_build_splitter_w',
 );
 
+has 'model' => (
+    is      => 'ro',
+    isa     => SqitchGUIModel,
+    lazy    => 1,
+    default => sub {
+        shift->app->model;
+    },
+);
+
 sub BUILD {
     my($self, @params) = @_;
 
@@ -185,7 +200,24 @@ sub BUILD {
 
     $self->frame->Hide;
 
-    $self->frame->SetMenuBar($self->menu_bar);
+    # Menu Bar
+    my $menu = App::Sqitch::GUI::Wx::Menubar->new(
+        app       => $self->app,
+        ancestor  => $self,
+        parent    => $self->frame,
+    );
+    $self->frame->SetMenuBar( $menu->menu_bar );
+
+    # Tool Bar
+    my $conf     = App::Sqitch::GUI::Config::Toolbar->new;
+    my @toolbars = $conf->all_buttons;
+    my $tb = $self->tool_bar;
+    foreach my $name (@toolbars) {
+        my $attribs = $conf->get_tool($name);
+        $tb->make_toolbar_button( $name, $attribs );
+    }
+    $tb->set_initial_mode( \@toolbars );
+    $self->frame->SetToolBar($tb);
 
     $self->main_sizer->Add( $self->left_side->panel,  1, wxEXPAND | wxALL, 0 );
     $self->main_sizer->Add( $self->right_side->panel, 0, wxEXPAND | wxALL, 0 );
@@ -226,22 +258,20 @@ sub _build_frame {
     return $y;
 }
 
-sub _build_menu_bar {
+sub _build_tool_bar {
     my $self = shift;
-    p $self;
-    say "_build_menu_bar";
-    my $mb   = App::Sqitch::GUI::View::MenuBar->new(
-        app      => $self->app,
-        ancestor => $self,
-        parent   => $self->frame,
+    my $tb = App::Sqitch::GUI::Wx::Toolbar->new(
+        app       => $self->app,
+        ancestor  => $self,
+        parent    => $self->frame,
+        icon_path => $self->app->config->icon_path,
     );
-    say "done";
-    return $mb;
+    return $tb;
 }
 
 sub _build_status_bar {
     my $self = shift;
-    my $sb   = App::Sqitch::GUI::View::StatusBar->new(
+    my $sb   = App::Sqitch::GUI::Wx::Statusbar->new(
         app      => $self->app,
         ancestor => $self,
         parent   => $self->frame,
@@ -250,7 +280,7 @@ sub _build_status_bar {
 }
 
 sub _build_size {
-    return Wx::Size->new(800, 650); # default window size
+    return Wx::Size->new(900, 700); # default window size
 }
 
 sub _build_style {
@@ -325,9 +355,10 @@ sub _build_project {
 sub _build_plan {
     my $self = shift;
     return App::Sqitch::GUI::View::Panel::Plan->new(
-        app      => $self->app,
-        parent   => $self->top_side->panel,
-        ancestor => $self,
+        app       => $self->app,
+        parent    => $self->top_side->panel,
+        ancestor  => $self,
+        list_data => $self->model->plan_list_data,
     );
 }
 
@@ -403,38 +434,10 @@ sub show_panel {
     return;
 }
 
-sub control_write_s {
-    my ( $self, $control, $value, $is_append ) = @_;
-
-    $value ||= q{};                 # empty
-
-    $control->ClearAll unless $is_append;
-    $control->AppendText($value);
-    $control->AppendText("\n");
-    $control->Colourise( 0, $control->GetTextLength );
-
-    return;
-}
-
-sub control_write_e {
-    my ( $self, $control, $value ) = @_;
-
-    $control->Clear;
-    $control->SetValue($value) if defined $value;
-
-    return;
-}
-
-sub combobox_write {
-    my ( $self, $name ) = @_;
-    $self->project->cbx_driver->SetValue($name) if $name;
-    return;
-}
-
 sub set_status {
     my ($self, $state, $gui_rules) = @_;
 
-    $self->status_bar->change_caption($state, 1);
+    $self->status_bar->change_caption( $state, 1 );
     foreach my $btn ( keys %{$gui_rules} ) {
         my $enable = $gui_rules->{$btn};
         $self->right_side->$btn->Enable($enable);
@@ -454,6 +457,51 @@ sub OnClose {
     my ($self, $frame, $event) = @_;
     $event->Skip();
     return;
+}
+
+sub get_toolbar_btn {
+    my ( $self, $name ) = @_;
+    return $self->tool_bar->get_toolbar_btn($name);
+}
+
+sub event_handler_for_tb_button {
+    my ( $self, $name, $calllback ) = @_;
+    my $tb_id = $self->get_toolbar_btn($name)->GetId;
+    EVT_TOOL $self->frame, $tb_id, $calllback;
+    return;
+}
+
+sub event_handler_for_list {
+    my ( $self, $list, $calllback ) = @_;
+    EVT_LIST_ITEM_SELECTED $self->frame, $list, $calllback;
+    return;
+}
+
+sub load_txt_form_for {
+    my ($self, $form, $field, $value) = @_;
+    hurl __ 'Wrong arguments passed to load_txt_form_for()'
+        unless defined $field;
+    my $name    = "txt_$field";
+    my $control = $self->$form->$name;
+    $self->$form->control_write_e($control, $value);
+    return;
+}
+
+sub load_sql_form_for {
+    my ($self, $form, $command, $value) = @_;
+    my $name    = "edit_$command";
+    my $control = $self->$form->$name;
+    $self->$form->control_write_stc($control, $value);
+}
+
+sub get_plan_list_ctrl {
+    my $self = shift;
+    return $self->plan->list_ctrl;
+}
+
+sub get_project_list_ctrl {
+    my $self = shift;
+    return $self->project->list_ctrl;
 }
 
 =head1 PANELS

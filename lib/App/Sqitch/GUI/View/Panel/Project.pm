@@ -1,5 +1,7 @@
 package App::Sqitch::GUI::View::Panel::Project;
 
+# ABSTRACT: The Project Panel
+
 use 5.010;
 use strict;
 use warnings;
@@ -12,16 +14,16 @@ use App::Sqitch::GUI::Types qw(
     WxStaticLine
     WxTextCtrl
     WxStaticText
-    SqitchGUIListCtrl
+    SqitchGUIWxListctrl
 );
 use Locale::TextDomain 1.20 qw(App-Sqitch-GUI);
 use Wx qw(:allclasses :everything);
 use Wx::Event qw(EVT_CLOSE);
 
-use App::Sqitch::GUI::ListDataTable;
-use App::Sqitch::GUI::ListCtrl;
+use App::Sqitch::GUI::Wx::Listctrl;
 
-with 'App::Sqitch::GUI::Roles::Element';
+with qw(App::Sqitch::GUI::Roles::Element
+        App::Sqitch::GUI::Roles::Panel);
 
 has 'panel' => (
     is      => 'rw',
@@ -88,16 +90,9 @@ has 'subform2_fg_sz' => (
 
 has 'list_ctrl' => (
     is      => 'rw',
-    isa     => SqitchGUIListCtrl,
+    isa     => SqitchGUIWxListctrl,
     lazy    => 1,
     builder => '_build_list_ctrl',
-);
-
-has 'list_data' => (
-    is      => 'ro',
-    default => sub {
-        return App::Sqitch::GUI::ListDataTable->new;
-    },
 );
 
 has 'h_line1' => (
@@ -119,13 +114,6 @@ has 'btn_default' => (
     isa     => WxButton,
     lazy    => 1,
     builder => '_build_btn_default',
-);
-
-has 'btn_add' => (
-    is      => 'rw',
-    isa     => WxButton,
-    lazy    => 1,
-    builder => '_build_btn_add',
 );
 
 has 'lbl_project' => (
@@ -305,8 +293,6 @@ sub BUILD {
         25 );
     $self->btn_sizer->Add( $self->btn_default, 1,
         wxLEFT | wxRIGHT | wxEXPAND, 25 );
-    $self->btn_sizer->Add( $self->btn_add, 1, wxLEFT | wxRIGHT | wxEXPAND,
-        25 );
 
     $self->list_fg_sz->Add( $self->btn_sizer, 1, wxALIGN_CENTRE);
 
@@ -518,28 +504,13 @@ sub _build_btn_default {
     return $button;
 }
 
-sub _build_btn_add {
-    my $self = shift;
-
-    my $button = Wx::Button->new(
-        $self->panel,
-        -1,
-        __ 'Add',
-        [ -1, -1 ],
-        [ -1, -1 ],
-    );
-    $button->Enable(0);
-
-    return $button;
-}
-
 sub _build_list_ctrl {
     my $self = shift;
-    my $list_ctrl = App::Sqitch::GUI::ListCtrl->new(
+    my $list_ctrl = App::Sqitch::GUI::Wx::Listctrl->new(
         app       => $self->app,
         parent    => $self->panel,
-        list_data => $self->list_data,
-        meta_data => $self->list_meta_data,
+        list_data => $self->app->model->project_list_data,
+        meta_data => $self->app->model->project_list_meta_data,
     );
     return $list_ctrl;
 }
@@ -551,41 +522,6 @@ sub _set_events {
 
 sub OnClose {
     my ($self, $event) = @_;
-}
-
-sub list_meta_data {
-    return [
-        {   field => 'recno',
-            label => '#',
-            align => 'center',
-            width => 25,
-            type  => 'int',
-        },
-        {   field => 'project',
-            label => __ 'Project',
-            align => 'left',
-            width => 100,
-            type  => 'str',
-        },
-        {   field => 'database',
-            label => __ 'Database',
-            align => 'left',
-            width => 60,
-            type  => 'str',
-        },
-        {   field => 'default',
-            label => __ 'Default',
-            align => 'center',
-            width => 60,
-            type  => 'bool',
-        },
-        {   field => 'description',
-            label => __ 'Description',
-            align => 'left',
-            width => 320,
-            type  => 'str',
-        },
-    ];
 }
 
 =head1 AUTHOR

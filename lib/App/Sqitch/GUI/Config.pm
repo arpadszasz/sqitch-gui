@@ -1,40 +1,44 @@
 package App::Sqitch::GUI::Config;
 
+# ABSTRACT: A Sqitch::Config Extension
+
 use 5.010;
 use strict;
 use utf8;
 use warnings;
 use Moo;
+use MooX::HandlesVia;
 use App::Sqitch::GUI::Types qw(
     Dir
     Str
     Maybe
     HashRef
 );
-use Path::Class;
+use Path::Class qw(dir file);
+use File::ShareDir qw(dist_dir);
 use Try::Tiny;
 use List::Util qw(first);
 use App::Sqitch::X qw(hurl);
-use MooseX::AttributeHelpers;
 
 extends 'App::Sqitch::Config';
 
-has repo_default_name => (
+has default_project_name => (
     is      => 'rw',
     isa     => Maybe[Str],
     lazy    => 1,
     default => sub {
-        shift->get(key => 'core.project');
+        my $self = shift;
+        return $self->get(key => 'core.project');
     }
 );
 
-has repo_default_path => (
+has default_project_path => (
     is      => 'rw',
     isa     => Maybe[Dir],
     lazy    => 1,
     default => sub {
         my $self    = shift;
-        my $default = $self->repo_default_name;
+        my $default = $self->default_project_name;
         return $default
             ? dir $self->get( key => "project.${default}.path" )
             : undef;
@@ -43,12 +47,12 @@ has repo_default_path => (
 
 sub local_file {
     my $self = shift;
-    return $self->repo_default_path
-        ? file( $self->repo_default_path, $self->confname )
+    return $self->default_project_path
+        ? file( $self->default_project_path, $self->confname )
         : file( $self->confname );
 };
 
-has _repo_conf_list => (
+has _conf_projects_list => (
     is      => 'ro',
     isa     => Maybe[HashRef],
     lazy    => 1,
@@ -58,21 +62,34 @@ has _repo_conf_list => (
 );
 
 has project_list => (
-    is      => 'ro',
-    isa     => Maybe[HashRef],
-    lazy    => 1,
-    builder => '_build_project_list',
+    is          => 'ro',
+    handles_via => 'Hash',
+    lazy        => 1,
+    builder     => '_build_project_list',
+    handles     => {
+        get_project => 'get',
+        has_project => 'count',
+        projects    => 'kv',
+    },
 );
 
+sub _build_project_list {
+    my $self = shift;
+    my $project_list = {};
+    while ( my ( $key, $path ) = each( %{ $self->_conf_projects_list } ) ) {
+        my ($name) = $key =~ m{^project[.](.+)[.]path$};
+        $project_list->{$name} = dir $path;
+    }
+    return $project_list;
+}
+
 has 'engine_list' => (
-    metaclass => 'Collection::Hash',
-    is        => 'ro',
-    isa       => HashRef[Str],
-    required  => 1,
-    lazy      => 1,
-    default   => sub {
-        {
-            unknown  => 'Unknown',
+    handles_via => 'Hash',
+    is          => 'ro',
+    required    => 1,
+    lazy        => 1,
+    default     => sub {
+        {   unknown  => 'Unknown',
             pg       => 'PostgreSQL',
             mysql    => 'MySQL',
             sqlite   => 'SQLite',
@@ -80,7 +97,9 @@ has 'engine_list' => (
             firebird => 'Firebird',
         };
     },
-    provides => { 'get' => 'get_engine_name', }
+    handles => {
+        get_engine_name => 'get',
+    },
 );
 
 sub get_engine_from_name {
@@ -89,42 +108,26 @@ sub get_engine_from_name {
     return $engines{$engine};
 }
 
-sub _build_project_list {
-    my $self = shift;
-
-    my $repo_cfg_lst = $self->_repo_conf_list;
-
-    my $project_list = {};
-    while ( my ( $key, $path ) = each( %{$repo_cfg_lst} ) ) {
-        my ($name) = $key =~ m{^project[.](.+)[.]path$};
-        $project_list->{$name} = dir $path;
-    }
-
-    return $project_list;
-}
-
 sub has_repo_name {
     my ($self, $name) = @_;
     hurl 'Wrong arguments passed to has_repo_name()'
         unless $name;
-    # p $self->project_list;
-    # p $name;
     return 1 if first { $name eq $_ } keys %{$self->project_list};
     return 0;
 }
 
 sub has_repo_path {
     my ($self, $path) = @_;
-    hurl 'Wrong arguments passed to has_repo_path()'
-        unless $path;
+    hurl 'Wrong arguments passed to has_repo_path()' unless $path;
     return 1 if first { $path->stringify eq $_ } values %{$self->project_list};
     return 0;
 }
 
 sub reload {
     my ( $self, $path ) = @_;
+    hurl 'Wrong arguments passed to reload()' unless $path;
+    $self->default_project_path($path);
     my $file = file $path, $self->confname;
-    print "Reloading $file...\n";
     try { $self->load($file) } catch { print "Reload config error: $_\n" };
 }
 
@@ -132,6 +135,15 @@ sub project_list_cnt {
     my $self = shift;
     return scalar keys %{ $self->project_list };
 }
+
+has 'icon_path' => (
+    is      => 'ro',
+    isa     => Dir,
+    default => sub {
+        my $self = shift;
+        return dir dist_dir( 'App-Sqitch-GUI' ), 'etc', 'icons';
+    },
+);
 
 =pod
 
